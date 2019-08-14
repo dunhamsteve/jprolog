@@ -33,31 +33,23 @@ function value(x: Term, e: Env): Term {
   }
 }
 
-function bind(key: string, value: Term, rest: Env): Env {
-  return {key,value,rest}
-}
-
-// FIXME occurs check?
 function unify(x: Term, y: Term, e: Env): Env {
   const x_ = value(x,e)
   const y_ = value(y,e)
   if (x_ === y_) return e
-  if (isvar(x_)) return bind(x_, y_, e)
-  if (isvar(y_)) return bind(y_, x_, e)
+  if (isvar(x_)) return {key:x_,value:y_,rest:e}
+  if (isvar(y_)) return {key:y_,value:x_,rest:e}
   if (x instanceof Array && y instanceof Array && x.length === y.length) {
     return x.reduce((e,t,i) => e && unify(t,y[i],e), e)
   }
 }
 
-// Rule -> List<Term>
-function copyRule(r: Rule,n:number): List<Term> {
-  let rval: List<Term> = {car:copy(r[0],n)}
-  let prev = rval
-  for (let i = 1; i<r.length; i++) {
-    prev.cdr = {car:copy(r[i],n)}
-    prev = prev.cdr
-  }
-  return rval
+function instantiate(r: Rule,n:number,goals:OList<Term>): List<Term> {
+  let dummy = {} as List<Term>
+  let prev = dummy
+  r.forEach(term => prev = prev.cdr = {car:copy(term,n)})
+  prev.cdr = goals
+  return dummy.cdr as List<Term>
 }
 
 function copy(t: Term, n: number): Term {
@@ -66,26 +58,22 @@ function copy(t: Term, n: number): Term {
   return t
 }
 
-function append<T>(a: OList<T>, b: OList<T>) {
-  const rval = {} as List<T>
-  let cur = rval
-  for (;a;a = a.cdr) {
-    cur = cur.cdr = {car:a.car}
-  }
-  cur.cdr = b
-  return rval.cdr
-}
-
-const printframe = console.log
-
 function prove(goals: OList<Term>, rules: Rule[], env: Env, n:number) {
-  if (!goals) return printframe('S',env)
+  if (!goals) return printframe(env)
   for (const rule of rules) { 
-    const a = copyRule(rule,n)
+    const a = instantiate(rule,n,goals.cdr)
     const newenv = unify(goals.car, a.car, env)
-    if (newenv) { prove(append(a.cdr, goals.cdr), db, newenv, n+1) }
+    if (newenv) { prove(a.cdr, db, newenv, n+1) }
   }
 }
+
+function pprint(term: Term, env:Env): Term {
+  const tt = value(term,env) // chase vars
+  return tt instanceof Array ?
+    `${tt[0]}(${tt.slice(1).map(x => pprint(x,env)).join(',')})` : tt
+}
+
+const printframe = (e:Env) => console.log(pprint(['path','?a','?b','?c'],e))
 
 const db: Rule[] = [
   [['edge','a','b']],
