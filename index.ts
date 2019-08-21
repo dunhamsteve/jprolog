@@ -18,7 +18,7 @@ function expand(x: Term, e: Env): Term {
   return x instanceof Array ? x.map(v => expand(v,e)) : x
 }
 
-const isvar = (x: any): x is Var => typeof x === "string" && x[0] === '?'
+const isvar = (x: any): x is Var => typeof x === "string" && ((x.charCodeAt(0) & 32) == 0)
 function unify(x: Term, y: Term, e: Env): Env {
   const x_ = expand(x, e), y_ = expand(y, e)
   if (x_ === y_) return e
@@ -119,9 +119,9 @@ edge(a,f). edge(c,d). edge(h,e).
 edge(a,g). edge(c,e). edge(h,f).
 edge(b,c). edge(g,h).
 
-path(?a,?b,cons(?a,cons(?b))) :- edge(?a,?b).
-path(?a,?c,cons(?a,?bc)) :- edge(?a,?b),path(?b,?c,?bc).
+path(A,B,cons(A,cons(B))) :- edge(A,B).
+path(A,C,cons(A,BC)) :- edge(A,B),path(B,C,BC).
 `)
 
 // run(['path', '?a', '?b', '?c'], db)
-run(['path', 'a','f','?p'],db)
+run(['path', 'a','f','P'],db)
