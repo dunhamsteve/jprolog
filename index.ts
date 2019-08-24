@@ -6,6 +6,7 @@ type Term = string | Var | ITerm
 interface ITerm extends Array<Term> { }
 type Rule = List<Term>
 type Env = { key: string; value: Term; rest: Env; } | undefined
+type State = { goals: OList<Term>, rules: OList<Rule>, env: Env, n: number, prev?: State, cut?: State }
 
 function lookup(key: string, env: Env): Term {
   for (let e = env; e; e = e.rest) { 
@@ -41,27 +42,30 @@ function addGoals(r: OList<Term>,  goals: OList<Term>, n: number): List<Term> {
 const copy = (t: Term, n: number): Term => {
   if (isvar(t)) return t + '_' + n
   if (t instanceof Array) return t.map(x => copy(x, n))
-  if (t === '!') return '!_'+n
   return t
 }
-type State = { goals: OList<Term>, rules: OList<Rule>, env: Env, n: number, prev?: State }
+
+// TODO - add cut back in, add "pop" at borders of goals, pop the cut stack on "pop"
+
 function run(goal: Term, db: OList<Rule>) {
-  let st: State = { goals: {car: goal}, rules: db, env: {} as Env, n: 0}
+  let st: State = { goals: {car: goal}, rules: db, env: {} as Env, n: 0 }
   while (true) {
     if (!st.rules || !st.goals) {
       if (!st.goals) console.log(pprint(expand(goal, st.env)))
       if (!st.prev) break
       st = st.prev
-    } else if (st.goals.car[0] === '!') {
-      const cut_n = Number(st.goals.car.slice(2))
+    } else if (st.goals.car[0] === '.') {
+      st.cut = st.cut && st.cut.cut
       st.goals = st.goals.cdr
-      while (st.prev && st.prev.n !== cut_n) st.prev = st.prev.prev
+    } else if (st.goals.car[0] === '!') {
+      st.prev = st.cut && st.cut.prev
+      st.goals = st.goals.cdr
     } else {
-      const newgoals = addGoals(st.rules.car,st.goals.cdr, st.n)
+      const newgoals = addGoals(st.rules.car,{car:'.',cdr:st.goals.cdr}, st.n)
       st.rules = st.rules.cdr
       const newenv = unify(st.goals.car, newgoals.car, st.env)
       if (newenv)
-        st = { goals: newgoals.cdr, rules: db, env: newenv, n: st.n+1, prev: st }
+        st = { goals: newgoals.cdr, rules: db, env: newenv, n: st.n+1, prev: st, cut: st }
     }
   }
 }
@@ -134,7 +138,6 @@ path(A,C,cons(A,BC)) :- edge(A,B),path(B,C,BC).
 foo(a). foo(b).
 baz(X) :- foo(X).
 bar(X,Y) :- foo(X), baz(Y), !.
-
 `)
 
 // run(['path', '?a', '?b', '?c'], db)
