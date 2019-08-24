@@ -2,19 +2,20 @@
 type List<T> = { car: T; cdr?: List<T> }
 type OList<T> = List<T> | undefined
 type Var = string
-type Term = string | Var | ITerm
+type Term = string | Var | ITerm 
 interface ITerm extends Array<Term> { }
 type Rule = List<Term>
 type Env = { key: string; value: Term; rest: Env; } | undefined
 
-function lookup(key: string, e: Env): Term|undefined {
-  for (; e; e = e.rest) { 
-    if (e.key === key) return isvar(e.value) ? lookup(e.value,e) : e.value
+function lookup(key: string, env: Env): Term {
+  for (let e = env; e; e = e.rest) { 
+    if (e.key === key) return isvar(e.value) ? lookup(e.value,env) : e.value
   }
+  return key
 }
 
 function expand(x: Term, e: Env): Term {
-  if (isvar(x)) x = lookup(x,e) || x
+  if (isvar(x)) x = lookup(x,e)
   return x instanceof Array ? x.map(v => expand(v,e)) : x
 }
 
@@ -37,17 +38,24 @@ function addGoals(r: OList<Term>,  goals: OList<Term>, n: number): List<Term> {
   return dummy.cdr as List<Term>
 }
 
-const copy = (t: Term, n: number): Term =>
-  isvar(t) && t + '_' + n || (t instanceof Array) && t.map(x => copy(x, n)) || t
-
+const copy = (t: Term, n: number): Term => {
+  if (isvar(t)) return t + '_' + n
+  if (t instanceof Array) return t.map(x => copy(x, n))
+  if (t === '!') return '!_'+n
+  return t
+}
+type State = { goals: OList<Term>, rules: OList<Rule>, env: Env, n: number, prev?: State }
 function run(goal: Term, db: OList<Rule>) {
-  type State = { goals: OList<Term>, rules: OList<Rule>, env: Env, n: number, prev?: State }
   let st: State = { goals: {car: goal}, rules: db, env: {} as Env, n: 0}
   while (true) {
     if (!st.rules || !st.goals) {
       if (!st.goals) console.log(pprint(expand(goal, st.env)))
       if (!st.prev) break
       st = st.prev
+    } else if (st.goals.car[0] === '!') {
+      const cut_n = Number(st.goals.car.slice(2))
+      st.goals = st.goals.cdr
+      while (st.prev && st.prev.n !== cut_n) st.prev = st.prev.prev
     } else {
       const newgoals = addGoals(st.rules.car,st.goals.cdr, st.n)
       st.rules = st.rules.cdr
@@ -59,7 +67,8 @@ function run(goal: Term, db: OList<Rule>) {
 }
 
 function parse(str: string) {
-  let rules: OList<Rule> = undefined
+  let rules = {} as List<Rule>
+  let tail = rules
   const toks: string[] = []
   str.replace(/\??\w+|[^\s]/g, (m) => (toks.push(m), ''))
   let p = 0
@@ -67,7 +76,7 @@ function parse(str: string) {
   const maybe = (tok: string) => toks[p] == tok && toks[p++]
   const pAtom = (): Term => toks[p].match(/^\??\w+$/) && toks[p++] || error('expected atom')
   const pTerm = (): Term => {
-    let rval: Term = pAtom()
+    let rval: Term = maybe("!") || pAtom()
     if (!maybe('(')) return rval
     rval = [rval]
     while (true) {
@@ -88,10 +97,10 @@ function parse(str: string) {
       }
     }
     if (!maybe('.')) error('expected .')
-    rules = { car: rval, cdr: rules }
+    tail = tail.cdr = { car: rval }
   }
   while (p < toks.length) pRule()
-  return rules
+  return rules.cdr
 }
 
 function pprint(term: Term): Term {
@@ -121,7 +130,14 @@ edge(b,c). edge(g,h).
 
 path(A,B,cons(A,cons(B))) :- edge(A,B).
 path(A,C,cons(A,BC)) :- edge(A,B),path(B,C,BC).
+
+foo(a). foo(b).
+baz(X) :- foo(X).
+bar(X,Y) :- foo(X), baz(Y), !.
+
 `)
 
 // run(['path', '?a', '?b', '?c'], db)
 run(['path', 'a','f','P'],db)
+run(['bar', 'X', 'Y'],db)
+
