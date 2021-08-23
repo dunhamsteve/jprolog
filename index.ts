@@ -83,22 +83,16 @@ function parse(str: string) {
     let rval: Term = maybe("!") || pAtom()
     if (!maybe('(')) return rval
     rval = [rval]
-    while (true) {
-      rval.push(pTerm())
-      if (maybe(')')) return rval
-      if (!maybe(',')) error('expected , or )')
-    }
+    do { rval.push(pTerm()) } while (maybe(','))
+    if (!maybe(')')) error('expected , or )')
+    return rval
   }
   const pRule = () => {
     const rval: List<Term> = { car: pTerm() }
-    const key = rval.car[0] as string
-    let tmp = rval
     if (maybe(':')) {
       if (!maybe('-')) error('expected -')
-      while (true) {
-        tmp = tmp.cdr = { car: pTerm() }
-        if (!maybe(',')) break
-      }
+      let tmp = rval
+      do { tmp = tmp.cdr = { car: pTerm() } } while (maybe(','))
     }
     if (!maybe('.')) error('expected .')
     tail = tail.cdr = { car: rval }
